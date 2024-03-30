@@ -34,14 +34,13 @@
     "prettier": "prettier --config .prettierrc --write .",
     "test:watch": "jest --watch"
   },
-  "author": "Habib Maruev",
+  "author": "Alex Four",
   "license": "Apache-2.0",
   "dependencies": {
     "axios": "^0.27.2",
     "cron": "^2.1.0",
     "firebase": "^9.9.4",
     "jsdom": "^20.0.0",
-    "puppeteer": "^22.6.1",
     "tslib": "~2.4"
   },
   "volta": {

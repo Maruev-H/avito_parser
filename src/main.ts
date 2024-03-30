@@ -1,62 +1,54 @@
-import axios from 'axios';
-import { JSDOM } from 'jsdom';
-import { compareCollection, pause } from './helpers/utils';
-import p from './helpers/puppeteer';
-import db, { Ad, Collection } from './helpers/database';
-import fs from 'fs';
+import { CronJob } from 'cron';
+import { Avito } from './helpers/avito.js';
+import db, { Task } from './helpers/database.js';
+import { pause } from './helpers/utils.js';
 
-(async () => {
-  await pause(500);
+function createJob(task: Task): CronJob {
+  console.log('Создаю задачу ' + task.id);
 
-  let html;
+  return new CronJob(task.cron, async () => {
+    const avito = new Avito(task);
+    console.log('Запускаю задачу ' + task.id);
+
+    try {
+      const newIds = await avito.getAdsIds();
+
+      for (const id of newIds) {
+        await db.setNewAd(task.id, avito.updateAds[id]);
+        await pause(300);
+      }
+
+    } catch (err) {
+      console.error(err);
+    }
+
+  })
+
+}
+
+
+async function run() {
+  const jobs = []; 
+  await pause(5000);
+  let fullTasks = []; 
 
   try {
-    console.log('getting page info');
-    const { content } = await p.getPageContent(
-      'https://www.avito.ru/chechenskaya_respublika/avtomobili/vaz_lada/priora-ASgBAgICAkTgtg3GmSjitg2qrSg',
-    );
-    html = content;
-    console.log('getting page info succeded');
+    fullTasks = Object.values(await db.getTasks());
+    console.log('Получен список задач', fullTasks);
   } catch (err) {
-    if (axios.isAxiosError(err)) {
-      console.log(err);
-    }
     console.error(err);
   }
 
-  fs.writeFileSync('cap.html', html);
-
-  const dom = new JSDOM(html);
-  const document = dom.window.document;
-  const items = document.querySelectorAll('[data-marker=item]');
-
-  const newAds: Collection<Ad> = {};
-  console.log(`получено ${items.length} объявлений`);
-
-  items.forEach((node) => {
-    newAds[node.id] = {
-      id: node.id,
-      url: node.querySelector('[itemprop=url]').getAttribute('href'),
-      title: node.querySelector('[itemprop=name]').textContent,
-      price: Number(
-        node.querySelector('[itemprop=price]').getAttribute('content'),
-      ),
-    };
-  });
-
-  console.log(newAds);
-
-  const savedAds = await db.getSavedAds()
-
-  const newIds = compareCollection(savedAds, newAds)
-
-  console.log(newIds)
-
-  for(const id of newIds) {
-    await db.setNewAd(newAds[id])
-    await pause(500)
+  for (const task of fullTasks) {
+    const job = createJob(task);
+    job.start();
+    jobs.push(job);
   }
 
-  process.exit(1)
+  db.subscribeToTaskChange().then(() => {
+    jobs.forEach((j: CronJob) => j.stop());
+    run();
+  })
+}
 
-})();
+run();

@@ -16,9 +16,9 @@ export const LAUNCH_PUPPETEER_OPTS = {
 };
 
 export const PAGE_PUPPETEER_OPTS = {
-  networkIdle2Timeout: 5_000 * 1.5,
+  networkIdle2Timeout: 1_000 * 15,
   waitUntil: "networkidle2",
-  timeout: 1000 * 60 * 1.5,
+  timeout: 1000 * 60 * 3,
 };
 
 class PuppeteerHandler {

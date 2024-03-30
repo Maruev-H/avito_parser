@@ -1,67 +1,106 @@
 import { FirebaseApp, initializeApp } from 'firebase/app';
-import { Database, getDatabase, get, child, ref, set } from 'firebase/database';
-import { getAuth, signInWithEmailAndPassword } from 'firebase/auth';
-
-import { conf } from '../../config/config';
+import { getAuth, signInWithEmailAndPassword } from "firebase/auth";
+import { Database, getDatabase, set, ref, get, child, onChildAdded, onChildMoved, onChildRemoved, onChildChanged } from "firebase/database";
+import { conf } from '../../config/config'
 
 class DatabaseService {
-  app: FirebaseApp;
-  db: Database;
-
+  app: FirebaseApp
+  db: Database
   constructor() {
     try {
+
       this.app = initializeApp({
-        ...conf.firebase,
+        ...conf.firebase
       });
+
       const auth = getAuth();
-      signInWithEmailAndPassword(
-        auth,
-        conf.authFirebase.email,
-        conf.authFirebase.password,
-      ).catch((error) => {
+      signInWithEmailAndPassword(auth, conf.authFirebase.email, conf.authFirebase.password).catch(function (error) {
         const { code, message } = error;
         console.log(`${code} - ${message}`);
       });
+
       this.db = getDatabase(this.app);
-      console.log('Инициализировано');
+      console.log('Инициализированно');
+
     } catch (err) {
-      console.error('Applications work withjout database');
+      console.log(err);
+
+      console.error('Application works without database!!');
     }
   }
 
-  // получить список всех сохраненных объявлений
-  getSavedAds(): Promise<Collection<Ad>> {
+
+  getSavedAds(taskId: string): Promise<Collection<Ad>> {
     return new Promise((resolve, reject) => {
-      get(child(ref(this.db), 'ads'))
-        .then((snapshots) => {
-          if (snapshots.exists) {
-            resolve(snapshots.val() || {});
-          } else {
-            reject('No data avaible');
-          }
+      get(child(ref(this.db), 'ads/' + taskId)).then((snapshot) => {
+        if (snapshot.exists()) {
+          resolve(snapshot.val() || {})
+        } else {
+          reject("No data available")
+        }
+      }).catch((error) => {
+        reject(error)
+      });
+    })
+  }
+
+  setNewAd(path: string, ad: Ad) {
+    return new Promise((resolve, reject) => {
+      set(ref(this.db, 'ads/' + path + '/' + ad.id), ad).then(() => resolve(''))
+        .catch((error) => {
+          reject(error)
+        });
+    })
+  }
+
+  getTasks(): Promise<Collection<Task>> {
+    return new Promise((resolve, reject) => {
+      get(child(ref(this.db), 'tasks')).then((snapshot) => resolve(snapshot.val()))
+        .catch(err => {
+          reject(err)
         })
-        .catch((err) => reject(err));
-    });
+    })
   }
-  // добавить новое объявление
-  setNewAd(ad: Ad): Promise<unknown> {
-    return new Promise((resolve, reject) => {
-      set(ref(this.db, 'ads' + '/' + ad.id), ad).then(() => resolve('')).catch(err => reject(err))
-    });
+
+  subscribeToTaskChange() {
+    let activatePause = true;
+
+    return new Promise(resolve => {
+      onChildChanged(ref(this.db, 'tasks'), (sn) => resolve(sn.val()));
+      onChildMoved(ref(this.db, 'tasks'), (sn) => resolve(sn.val()));
+      onChildRemoved(ref(this.db, 'tasks'), (sn) => resolve(sn.val()));
+      onChildAdded(ref(this.db, 'tasks'), (sn) => {
+        setTimeout(() => {
+          activatePause = false;
+        })
+        if(!activatePause) {
+          resolve(sn.val())
+        }
+      });
+    })
   }
+
 }
 
-const db = new DatabaseService();
 
+const db = new DatabaseService();
 export default db;
 
 export interface Collection<T> {
-  [key: string]: T;
+  [key: string]: T
 }
 
 export interface Ad {
-  title: string;
-  price: number;
-  url: string;
-  id: string;
+  id: string
+  title: string,
+  price: number,
+  url: string
+}
+
+export interface Task {
+  id: string,
+  cron: string,
+  query: string,
+  cities: string[],
+  category: string,
 }
